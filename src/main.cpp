@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "predictor.h"
+#include "predictor.hpp"
 
 FILE *stream;
 char *buf = NULL;
@@ -41,10 +41,14 @@ handle_option(char *arg)
 {
   if (!strcmp(arg,"--static")) {
     bpType = STATIC;
-  } else if (!strncmp(arg,"--gshare:",9)) {
+  } else if (!strcmp(arg,"--twobit")) {
+    bpType = TWOBIT;
+  }
+  else if (!strncmp(arg,"--gshare:",9)) {
     bpType = GSHARE;
     sscanf(arg+9,"%d", &ghistoryBits);
-  } else if (!strncmp(arg,"--tournament:",13)) {
+  }
+  else if (!strncmp(arg,"--tournament:",13)) {
     bpType = TOURNAMENT;
     sscanf(arg+13,"%d:%d:%d", &ghistoryBits, &lhistoryBits, &pcIndexBits);
   } else if (!strcmp(arg,"--custom")) {
@@ -102,6 +106,9 @@ main(int argc, char *argv[])
     }
   }
 
+  // cout << "BpType: " << bpType << endl;
+  // cout << "ghistoryBits : " << ghistoryBits << ", lhistoryBits: " <<  lhistoryBits << ", pcIndexBits: " << pcIndexBits << endl;
+
   // Initialize the predictor
   init_predictor();
 
@@ -109,10 +116,12 @@ main(int argc, char *argv[])
   uint32_t mispredictions = 0;
   uint32_t pc = 0;
   uint8_t outcome = NOTTAKEN;
+  set<uint32_t> unique_pc;
 
   // Reach each branch from the trace
   while (read_branch(&pc, &outcome)) {
     num_branches++;
+    unique_pc.insert(pc);
 
     // Make a prediction and compare with actual outcome
     uint8_t prediction = make_prediction(pc);
@@ -128,10 +137,8 @@ main(int argc, char *argv[])
   }
 
   // Print out the mispredict statistics
-  printf("Branches:        %10d\n", num_branches);
-  printf("Incorrect:       %10d\n", mispredictions);
   float mispredict_rate = 100*((float)mispredictions / (float)num_branches);
-  printf("Misprediction Rate: %7.3f\n", mispredict_rate);
+  printf("Bits:        %10d, Branches:        %10d, Misprediction Rate: %7.3f\n", ghistoryBits, num_branches, mispredict_rate);
 
   // Cleanup
   fclose(stream);

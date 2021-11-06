@@ -11,6 +11,11 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <set>
+#include <iostream>
+#include <map>
+
+using namespace std;
 
 //
 // Student Information
@@ -30,6 +35,7 @@ extern const char *email;
 #define GSHARE      1
 #define TOURNAMENT  2
 #define CUSTOM      3
+#define TWOBIT      4
 extern const char *bpName[];
 
 // Definitions for 2-bit counters
@@ -37,6 +43,12 @@ extern const char *bpName[];
 #define WN  1			// predict NT, weak not taken
 #define WT  2			// predict T, weak taken
 #define ST  3			// predict T, strong taken
+
+// Definitions for tournament selector
+#define SL  0			// predict NT, strong not taken
+#define WL  1			// predict NT, weak not taken
+#define WG  2			// predict T, weak taken
+#define SG  3			// predict T, strong taken
 
 //------------------------------------//
 //      Predictor Configuration       //

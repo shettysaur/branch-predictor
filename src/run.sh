@@ -1,7 +1,7 @@
 #make clean
 #make all
 FILES="../traces/*"
-for (( g=12; g<=20; g=g+2 ))
+for (( g=2; g<=20; g=g+2 ))
 	do
 	echo "Processing $g bits"
 	for f in $FILES
