@@ -121,7 +121,6 @@ main(int argc, char *argv[])
   // Reach each branch from the trace
   while (read_branch(&pc, &outcome)) {
     num_branches++;
-    unique_pc.insert(pc);
 
     // Make a prediction and compare with actual outcome
     uint8_t prediction = make_prediction(pc);
