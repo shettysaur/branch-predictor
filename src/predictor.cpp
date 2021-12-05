@@ -44,19 +44,75 @@ int verbose;
 
 // Initialize the predictor
 //
+class Counter {       
+  public:             
+    int bits;
+	int value;
 
-map<uint32_t, uint8_t> gBht;
-map<uint32_t, pair<uint32_t,uint8_t> > lBht;
+	Counter(int bits){
+		this->bits = bits;
+		this->value = 0;
+	}
+
+	Counter(int bits, int value){
+		this->bits = bits;
+		this->value = value;
+	}
+
+	void increment(){
+		if (this->value != ((1 << bits)-1))
+			this->value++;
+	}
+
+	void decrement(){
+		if (this->value != 0)
+			this->value--;
+	}
+};
+
+class SignedCounter {       
+  public:             
+    int bits;
+	int value;
+
+	SignedCounter(int bits){
+		this->bits = bits;
+		this->value = -(1 << (bits-1));
+	}
+
+	SignedCounter(int bits, int value){
+		this->bits = bits;
+		this->value = value;
+	}
+
+	void increment(){
+		if (this->value != ((1 << (bits-1))-1))
+			this->value++;
+	}
+
+	void decrement(){
+		if (this->value != -(1 << (bits-1)))
+			this->value--;
+	}
+};
+
+map<uint32_t, SignedCounter*> gBht;
+map<uint32_t, pair<uint32_t,uint32_t> > lBht;
+map<uint32_t, uint8_t> localPredictionMap;
 map<uint32_t, uint8_t> tournamentSelector;
 uint32_t gHistory;
+uint32_t lHistory;
 uint32_t gMask;
 uint32_t lMask;
 uint32_t pcIndexMask;
-uint32_t addr;
+uint32_t gIndex;
+uint32_t lIndex;
 uint32_t pcIndex;
 uint32_t pcTags;
 uint8_t localPrediction;
 uint8_t globalPrediction;
+int n = 0;
+int counterBits = 3;
 
 void
 init_predictor()
@@ -69,7 +125,7 @@ init_predictor()
   gHistory = 0;
   gMask = ((1 << (ghistoryBits))-1);
   lMask = ((1 << (lhistoryBits))-1);
-  pcIndexMask = ((1 << (pcIndexBits+1))-1);
+  pcIndexMask = ((1 << (pcIndexBits))-1);
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -87,66 +143,28 @@ make_prediction(uint32_t pc)
   switch (bpType) {
     case STATIC:
       if(gBht.find(pc) != gBht.end()){
-        return gBht[pc];
+        return gBht[pc]->value;
       }
       else{
         return NOTTAKEN;
       }
     case TWOBIT:
       if(gBht.find(pc) != gBht.end()){
-        if(gBht[pc] == SN || gBht[pc] == WN)
+        if(gBht[pc]->value == SN || gBht[pc]->value == WN)
           return NOTTAKEN;
         else
           return TAKEN;
       }
       else{
-        gBht[pc] = SN;
+        gBht.insert(make_pair(pc, new SignedCounter(counterBits)));
         return NOTTAKEN;
       }
     case GSHARE:
-		addr = (gHistory ^ pc);
-		if(gBht.find(addr) != gBht.end()){
-			if(gBht[addr] == SN || gBht[addr] == WN)
-				return NOTTAKEN;
-			else
-				return TAKEN;
-			}
-		else{
-			gBht[addr] = SN;
-			return NOTTAKEN;
-		}
+		return gshare_prediction(pc);
+		
     case TOURNAMENT:
-		pcIndex = (pc & pcIndexMask);
-		pcTags = (pc & ~pcIndexMask);
-		if(lBht.find(pcIndex) != lBht.end()){
-			if(lBht[pcIndex].first == pcTags){
-				if(lBht[pcIndex].second == SN || lBht[pcIndex].second == WN){
-					localPrediction = NOTTAKEN;
-				}
-				else{
-					localPrediction = TAKEN;
-				}
-			}
-			else{
-				lBht[pcIndex]= make_pair(pcTags, SN);
-				localPrediction = NOTTAKEN;
-			}
-		}
-		else{
-			lBht[pcIndex] = make_pair(pcTags, SN);
-			localPrediction =  NOTTAKEN;
-		}
-		addr = (gHistory ^ pc);
-		if(gBht.find(addr) != gBht.end()){
-			if(gBht[addr] == SN || gBht[addr] == WN)
-				globalPrediction = NOTTAKEN;
-			else
-				globalPrediction = TAKEN;
-		}
-		else{
-			gBht[addr] = SN;
-			globalPrediction = NOTTAKEN;
-		}
+		localPrediction = local_prediction(pc);
+		globalPrediction = gshare_prediction(pc);
 		if(tournamentSelector.find(pcIndex) != tournamentSelector.end()){
 			if(tournamentSelector[pcIndex] == SL || tournamentSelector[pcIndex] == WL){
 				return localPrediction;
@@ -168,6 +186,56 @@ make_prediction(uint32_t pc)
   return NOTTAKEN;
 }
 
+uint8_t gshare_prediction(uint32_t pc){
+	gIndex = (gHistory ^ pc) & gMask;
+	if(gBht.find(gIndex) != gBht.end()){
+		// cout << "GIndex : " << gIndex << " predition : " << gBht[gIndex]->value << endl;
+		if(gBht[gIndex]->value >= 0)
+			return TAKEN;
+		else
+			return NOTTAKEN;
+		}
+	else{
+		gBht.insert(make_pair(gIndex, new SignedCounter(counterBits)));
+		return NOTTAKEN;
+	}
+}
+
+uint8_t local_prediction(uint32_t pc){
+	pcIndex = (pc & pcIndexMask);
+	pcTags = (pc & ~pcIndexMask);
+	if(lBht.find(pcIndex) != lBht.end()){
+		if(lBht[pcIndex].first == pcTags){
+			lHistory = lBht[pcIndex].second;
+			lIndex = lHistory;
+			if(localPredictionMap.find(lIndex) != localPredictionMap.end()){
+				if(localPredictionMap[lIndex] == SN || localPredictionMap[lIndex] == WN){
+					return NOTTAKEN;
+				}
+				else{
+					return TAKEN;
+				}
+			}
+			else{
+				localPredictionMap[lIndex] = SN;
+				return NOTTAKEN;
+			}
+		}
+		else{
+			lBht[pcIndex]= make_pair(pcTags, 0);
+			return NOTTAKEN;
+		}
+	}
+	else{
+		lBht[pcIndex] = make_pair(pcTags, SN);
+		return  NOTTAKEN;
+	}
+}
+
+uint8_t gehl_prediction(uint32_t pc){
+	return NOTTAKEN;
+}
+
 // Train the predictor the last executed branch at PC 'pc' and with
 // outcome 'outcome' (true indicates that the branch was taken, false
 // indicates that the branch was not taken)
@@ -181,37 +249,38 @@ train_predictor(uint32_t pc, uint8_t outcome)
 
   switch (bpType) {
     case STATIC:
-		gBht[pc] = outcome;
+		gBht[pc] = new SignedCounter(1, outcome);
+		break;
     case TWOBIT:
 		if(outcome){
-			if(gBht[pc] != ST)
-				gBht[pc]++;
-			}
-			else{
-				if(gBht[pc] != SN)
-					gBht[pc]--;
-			}
+			if(gBht[pc]->value != ST)
+				gBht[pc]->increment();
+		}
+		else{
+			if(gBht[pc]->value != SN)
+				gBht[pc]->decrement();
+		}
+		break;
     case GSHARE:
 		if(outcome){
-			if(gBht[addr] != ST)
-				gBht[addr]++;
+			gBht[gIndex]->increment();
 		}
 		else{
-			if(gBht[addr] != SN)
-				gBht[addr]--;
+			gBht[gIndex]->decrement();
 		}
+		break;
     case TOURNAMENT:
 		if(outcome){
-			if(gBht[addr] != ST)
-				gBht[addr]++;
-			if(lBht[pcIndex].second != ST)
-				lBht[pcIndex].second++;
+			if(gBht[gIndex]->value != ST)
+				gBht[gIndex]->increment();
+			if(localPredictionMap[lIndex] != ST)
+				localPredictionMap[lIndex]++;
 		}
 		else{
-			if(gBht[addr] != SN)
-				gBht[addr]--;
-			if(lBht[pcIndex].second != SN)
-				lBht[pcIndex].second--;
+			if(gBht[gIndex] != SN)
+				gBht[gIndex]->decrement();
+			if(localPredictionMap[lIndex] != SN)
+				localPredictionMap[lIndex]--;
 		}
 		if(localPrediction != globalPrediction){
 			if(outcome == localPrediction){
@@ -223,9 +292,11 @@ train_predictor(uint32_t pc, uint8_t outcome)
 					tournamentSelector[pcIndex]--;
 			}
 		}
+		break;
     case CUSTOM:
     default:
       break;
   }
   gHistory = ((gHistory << 1) | outcome) & gMask;
+  lBht[pcIndex].second = ((lBht[pcIndex].second << 1) | outcome) & lMask;
 }

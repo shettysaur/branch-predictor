@@ -79,4 +79,10 @@ uint8_t make_prediction(uint32_t pc);
 //
 void train_predictor(uint32_t pc, uint8_t outcome);
 
+uint8_t gshare_prediction(uint32_t pc);
+
+uint8_t local_prediction(uint32_t pc);
+
+uint8_t gehl_prediction(uint32_t pc);
+
 #endif
