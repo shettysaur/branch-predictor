@@ -111,11 +111,18 @@ uint32_t pcIndex;
 uint32_t pcTags;
 uint8_t localPrediction;
 uint8_t globalPrediction;
+
+//CUSTOM
+map<uint32_t, SignedCounter*> gehl[M];
+int S;
+uint32_t gHistoryArray[M];
+uint32_t gMaskArray[M];
+uint8_t prediction;
+
 int n = 0;
 int counterBits = 3;
 
-void
-init_predictor()
+void init_predictor()
 {
   //
   //TODO: Initialize Branch Predictor Data Structures
@@ -126,14 +133,22 @@ init_predictor()
   gMask = ((1 << (ghistoryBits))-1);
   lMask = ((1 << (lhistoryBits))-1);
   pcIndexMask = ((1 << (pcIndexBits))-1);
+
+  uint32_t x = 2;
+  for(int i = 0 ; i < M ; i++){
+	  gMaskArray[i] = ((1 << (x))-1);
+	  x *= 2;
+  }
+  
+  //CUSTOM
+
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
 // Returning TAKEN indicates a prediction of taken; returning NOTTAKEN
 // indicates a prediction of not taken
 //
-uint8_t
-make_prediction(uint32_t pc)
+uint8_t make_prediction(uint32_t pc)
 {
   //
   //TODO: Implement prediction scheme
@@ -178,6 +193,7 @@ make_prediction(uint32_t pc)
 			return localPrediction;
 		}
     case CUSTOM:
+		return gehl_prediction(pc);
     default:
       break;
   }
@@ -233,15 +249,32 @@ uint8_t local_prediction(uint32_t pc){
 }
 
 uint8_t gehl_prediction(uint32_t pc){
-	return NOTTAKEN;
+	S = M/2;
+	for(int i = 0; i < M; i++){
+		gIndex = index(pc, gHistoryArray[i]);
+		gBht = gehl[i];
+		if(gBht.find(gIndex) != gBht.end()){
+			S += gBht[gIndex]->value;
+		} 
+		else{
+			gBht.insert(make_pair(gIndex, new SignedCounter(counterBits)));
+			S += gBht[gIndex]->value;
+		}
+	}
+	
+	prediction = (S >= 0) ? TAKEN : NOTTAKEN;
+	return prediction;
+}
+
+uint32_t index(uint32_t pc, uint32_t ghistory){
+	return 0;
 }
 
 // Train the predictor the last executed branch at PC 'pc' and with
 // outcome 'outcome' (true indicates that the branch was taken, false
 // indicates that the branch was not taken)
 //
-void
-train_predictor(uint32_t pc, uint8_t outcome)
+void train_predictor(uint32_t pc, uint8_t outcome)
 {
   //
   //TODO: Implement Predictor training
@@ -294,9 +327,26 @@ train_predictor(uint32_t pc, uint8_t outcome)
 		}
 		break;
     case CUSTOM:
+		if(prediction != outcome || S < theta){
+			for(int i = 0; i < M; i++){
+				gBht = gehl[i];
+				gIndex = index(pc, gHistoryArray[i]);
+				if(outcome){
+					gBht[gIndex]->increment();
+				}
+				else{
+					gBht[gIndex]->decrement();
+				}
+			}
+		}
     default:
       break;
   }
   gHistory = ((gHistory << 1) | outcome) & gMask;
   lBht[pcIndex].second = ((lBht[pcIndex].second << 1) | outcome) & lMask;
+
+  // CUSTOM
+  for(int i = 0 ; i< M ; i++){
+	  gHistoryArray[i] = ((gHistoryArray[i] << 1) | outcome) & gMaskArray[i];
+  }
 }

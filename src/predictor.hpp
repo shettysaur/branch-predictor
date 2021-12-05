@@ -24,6 +24,10 @@ extern const char *studentName;
 extern const char *studentID;
 extern const char *email;
 
+#define M 4
+#define N 2048
+#define theta 4
+
 //------------------------------------//
 //      Global Predictor Defines      //
 //------------------------------------//
@@ -84,5 +88,7 @@ uint8_t gshare_prediction(uint32_t pc);
 uint8_t local_prediction(uint32_t pc);
 
 uint8_t gehl_prediction(uint32_t pc);
+
+uint32_t index(uint32_t pc, uint32_t ghistory);
 
 #endif
