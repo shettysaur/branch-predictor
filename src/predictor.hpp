@@ -89,6 +89,5 @@ uint8_t local_prediction(uint32_t pc);
 
 uint8_t gehl_prediction(uint32_t pc);
 
-uint32_t index(uint32_t pc, uint32_t ghistory);
-
+uint32_t index(uint32_t pc, uint32_t gh, int table_id);
 #endif
