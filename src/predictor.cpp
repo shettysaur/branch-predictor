@@ -117,7 +117,7 @@ map<uint32_t, SignedCounter*> gehl[M];
 int S;
 uint32_t gHistoryArray[M];
 uint32_t gMaskArray[M];
-uint8_t prediction;
+int prediction;
 
 int n = 0;
 int counterBits = 3;
@@ -252,16 +252,14 @@ uint8_t gehl_prediction(uint32_t pc){
 	S = M/2;
 	for(int i = 0; i < M; i++){
 		gIndex = index(pc, gHistoryArray[i]);
-		gBht = gehl[i];
-		if(gBht.find(gIndex) != gBht.end()){
-			S += gBht[gIndex]->value;
+		if(gehl[i].find(gIndex) != gehl[i].end()){
+			S += gehl[i][gIndex]->value;
 		} 
 		else{
-			gBht.insert(make_pair(gIndex, new SignedCounter(counterBits)));
-			S += gBht[gIndex]->value;
+			gehl[i].insert(make_pair(gIndex, new SignedCounter(counterBits)));
+			S += gehl[i][gIndex]->value;
 		}
 	}
-	
 	prediction = (S >= 0) ? TAKEN : NOTTAKEN;
 	return prediction;
 }
@@ -329,13 +327,12 @@ void train_predictor(uint32_t pc, uint8_t outcome)
     case CUSTOM:
 		if(prediction != outcome || S < theta){
 			for(int i = 0; i < M; i++){
-				gBht = gehl[i];
 				gIndex = index(pc, gHistoryArray[i]);
 				if(outcome){
-					gBht[gIndex]->increment();
+					gehl[i][gIndex]->increment();
 				}
 				else{
-					gBht[gIndex]->decrement();
+					gehl[i][gIndex]->decrement();
 				}
 			}
 		}
