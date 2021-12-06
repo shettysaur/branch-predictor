@@ -6,6 +6,7 @@
 //  described in the README                               //
 //========================================================//
 #include <stdio.h>
+#include <math.h>
 #include "predictor.hpp"
 
 //
@@ -251,7 +252,7 @@ uint8_t local_prediction(uint32_t pc){
 uint8_t gehl_prediction(uint32_t pc){
 	S = M/2;
 	for(int i = 0; i < M; i++){
-		gIndex = index(pc, gHistoryArray[i]);
+		gIndex = index(pc, gHistoryArray[i], i);
 		gBht = gehl[i];
 		if(gBht.find(gIndex) != gBht.end()){
 			S += gBht[gIndex]->value;
@@ -266,8 +267,30 @@ uint8_t gehl_prediction(uint32_t pc){
 	return prediction;
 }
 
-uint32_t index(uint32_t pc, uint32_t ghistory){
-	return 0;
+uint32_t index(uint32_t pc, uint32_t gh, int table_id){
+	
+	int index_len = 11;
+	int length = pow(2.0, table_id + 1);
+	uint32_t index = 0;
+	uint32_t val_temp;
+	uint32_t mask_pc = 1;
+	mask_pc = (mask_pc << index_len) - 1;
+	uint32_t mask_gh = 1;
+	mask_gh = (mask_gh << length) - 1;
+
+	for (int i = 0; i <= 32 / index_len;i = i + 1) {
+		index = index ^ (pc & mask_pc);
+		pc = pc >> index_len;
+	}
+
+	val_temp = gh & mask_gh;
+
+	for (int i = 0; i <= 32 / index_len; i = i + 1) {
+		index = index ^ (val_temp & mask_pc);
+		val_temp = val_temp >> index_len;
+	}
+
+	return index;
 }
 
 // Train the predictor the last executed branch at PC 'pc' and with
@@ -330,7 +353,7 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 		if(prediction != outcome || S < theta){
 			for(int i = 0; i < M; i++){
 				gBht = gehl[i];
-				gIndex = index(pc, gHistoryArray[i]);
+				gIndex = index(pc, gHistoryArray[i],i);
 				if(outcome){
 					gBht[gIndex]->increment();
 				}
@@ -350,3 +373,5 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 	  gHistoryArray[i] = ((gHistoryArray[i] << 1) | outcome) & gMaskArray[i];
   }
 }
+
+
