@@ -97,6 +97,23 @@ class SignedCounter {
 	}
 };
 
+class GlobalHistory {       
+  public:             
+    uint64_t msb;
+	uint64_t lsb;
+
+	GlobalHistory(){
+		this->msb = 0;
+		this->lsb = 0;
+	}
+
+	void update(uint8_t outcome){
+		uint8_t shift = this->lsb >> 63;
+		this->lsb = ((this->lsb << 1) | outcome);
+		this->msb = ((this->msb << 1) | shift);
+	}
+};
+
 map<uint32_t, SignedCounter*> gBht;
 map<uint32_t, pair<uint32_t,uint32_t> > lBht;
 map<uint32_t, uint8_t> localPredictionMap;
@@ -121,7 +138,7 @@ uint32_t gMaskArray[M];
 int prediction;
 
 int n = 0;
-int counterBits = 3;
+int counterBits = 4;
 
 void init_predictor()
 {
