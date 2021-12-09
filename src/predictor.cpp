@@ -141,17 +141,21 @@ uint32_t pcTags;
 uint8_t localPrediction;
 uint8_t globalPrediction;
 
+
 //CUSTOM
 map<uint32_t, SignedCounter*> gehl[M];
 int S;
-//uint32_t gHistoryArray[M];
 GlobalHistory* lgGHistory = new GlobalHistory();
-//uint32_t gMaskArray[M];
+int gMaskArray[M_max];
+SignedCounter* alias;
+SignedCounter* tc;
+uint8_t last_table_tag[N];
 int prediction;
 
 int n = 0;
 int counterBits = 2;
 int counterBitsGehl = 3;
+int theta = 4;
 
 void init_predictor()
 {
@@ -165,15 +169,19 @@ void init_predictor()
   lMask = ((1 << (lhistoryBits))-1);
   pcIndexMask = ((1 << (pcIndexBits))-1);
 
-  /** gMaskArray[0] = 0; //Local history counter
-  uint32_t x = 2;
-  for(int i = 1 ; i < M ; i++){
-	  gMaskArray[i] = ((1 << (x))-1);
-	  x *= 2;
-  }
-  **/
+   
   //CUSTOM
-
+  gMaskArray[0] = 0; //Local history counter
+  float x = 3.0;
+  for (int i = 1; i < M_max; i++) {
+	  gMaskArray[i] = int (x + 0.5);
+	  x *= 1.6;
+  }
+  alias =  new SignedCounter(aliasBits,-1);
+  tc = new SignedCounter(thetacountBits, 0);
+  for (int i = 0; i < N; i++) {
+	  last_table_tag[i] = 0;
+  }
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -298,12 +306,13 @@ uint8_t gehl_prediction(uint32_t pc){
 
 uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id) {
 
-	int index_len = 10;
-	int length = 0;
-	if (table_id > 0) {
-		length = pow(2.0, table_id );
+	int index_len = 11;
+	int length = gMaskArray[table_id];
+	if (((table_id == 2) ) && (alias->value > 0)) {
+		length = gMaskArray[table_id+4];
 	}
-
+	//printf("%d", length);
+	
 	uint32_t index = 0;
 	uint32_t mask_pc = (1 << index_len) - 1;
 	for (int i = 0; i <= 32 / index_len;i = i + 1) {
@@ -399,6 +408,31 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 				else{
 					gehl[i][gIndex]->decrement();
 				}
+
+				if (i == (M - 1)) {
+					if (last_table_tag[gIndex] == (pc & 7)) {
+						alias->increment();
+					}
+					else {
+						alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();
+					}
+					last_table_tag[gIndex] = (pc & 7);
+				}
+			}
+			//printf("%d", alias->value);
+		}
+		if (prediction != outcome) {
+			tc->increment();
+			if (tc->value >= 50) {
+				tc->value = 0;
+				//theta = theta + 1;
+			}
+		}
+		else if ((prediction == outcome) && (S < theta)) {
+			tc->decrement();
+			if(tc->value < -50) {
+				tc->value = 0;
+				//theta = theta - 1;
 			}
 		}
     default:

@@ -24,9 +24,12 @@ extern const char *studentName;
 extern const char *studentID;
 extern const char *email;
 
-#define M 6
-#define N 1024
-#define theta 4
+#define M 5
+#define M_max 9
+#define N 2048
+//#define theta 7
+#define aliasBits 8
+#define thetacountBits 7
 
 //------------------------------------//
 //      Global Predictor Defines      //
