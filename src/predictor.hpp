@@ -24,8 +24,8 @@ extern const char *studentName;
 extern const char *studentID;
 extern const char *email;
 
-#define M 4
-#define N 2048
+#define M 6
+#define N 1024
 #define theta 4
 
 //------------------------------------//
@@ -89,5 +89,5 @@ uint8_t local_prediction(uint32_t pc);
 
 uint8_t gehl_prediction(uint32_t pc);
 
-uint32_t index(uint32_t pc, uint32_t gh, int table_id);
+//uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id);
 #endif

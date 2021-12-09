@@ -112,7 +112,18 @@ class GlobalHistory {
 		this->lsb = ((this->lsb << 1) | outcome);
 		this->msb = ((this->msb << 1) | shift);
 	}
+	
+	GlobalHistory operator >> (int shift_val) {
+		GlobalHistory res ;
+		uint64_t mask = (1 << shift_val) - 1;
+		uint64_t value = msb & mask;
+		value = value << (64 - shift_val);
+		res.lsb = (lsb >> shift_val) ^ value;
+		res.msb = msb >> shift_val;
+		return res;
+	}
 };
+uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id);
 
 map<uint32_t, SignedCounter*> gBht;
 map<uint32_t, pair<uint32_t,uint32_t> > lBht;
@@ -133,12 +144,14 @@ uint8_t globalPrediction;
 //CUSTOM
 map<uint32_t, SignedCounter*> gehl[M];
 int S;
-uint32_t gHistoryArray[M];
-uint32_t gMaskArray[M];
+//uint32_t gHistoryArray[M];
+GlobalHistory* lgGHistory = new GlobalHistory();
+//uint32_t gMaskArray[M];
 int prediction;
 
 int n = 0;
-int counterBits = 4;
+int counterBits = 2;
+int counterBitsGehl = 3;
 
 void init_predictor()
 {
@@ -152,12 +165,13 @@ void init_predictor()
   lMask = ((1 << (lhistoryBits))-1);
   pcIndexMask = ((1 << (pcIndexBits))-1);
 
+  /** gMaskArray[0] = 0; //Local history counter
   uint32_t x = 2;
-  for(int i = 0 ; i < M ; i++){
+  for(int i = 1 ; i < M ; i++){
 	  gMaskArray[i] = ((1 << (x))-1);
 	  x *= 2;
   }
-  
+  **/
   //CUSTOM
 
 }
@@ -256,7 +270,7 @@ uint8_t local_prediction(uint32_t pc){
 			}
 		}
 		else{
-			lBht[pcIndex]= make_pair(pcTags, 0);
+			lBht[pcIndex]= make_pair(pcTags, 0);  //Make this SN as well
 			return NOTTAKEN;
 		}
 	}
@@ -269,12 +283,12 @@ uint8_t local_prediction(uint32_t pc){
 uint8_t gehl_prediction(uint32_t pc){
 	S = M/2;
 	for(int i = 0; i < M; i++){
-		gIndex = index(pc, gHistoryArray[i],i);
+		gIndex = index(pc, lgGHistory,i);
 		if(gehl[i].find(gIndex) != gehl[i].end()){
 			S += gehl[i][gIndex]->value;
 		} 
 		else{
-			gehl[i].insert(make_pair(gIndex, new SignedCounter(counterBits)));
+			gehl[i].insert(make_pair(gIndex, new SignedCounter(counterBitsGehl)));
 			S += gehl[i][gIndex]->value;
 		}
 	}
@@ -282,27 +296,38 @@ uint8_t gehl_prediction(uint32_t pc){
 	return prediction;
 }
 
-uint32_t index(uint32_t pc, uint32_t gh, int table_id) {
+uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id) {
 
-	int index_len = 11;
-	int length = pow(2.0, table_id + 1);
+	int index_len = 10;
+	int length = 0;
+	if (table_id > 0) {
+		length = pow(2.0, table_id );
+	}
+
 	uint32_t index = 0;
-	uint32_t val_temp;
-	uint32_t mask_pc = 1;
-	mask_pc = (mask_pc << index_len) - 1;
-	uint32_t mask_gh = 1;
-	mask_gh = (mask_gh << length) - 1;
-
+	uint32_t mask_pc = (1 << index_len) - 1;
 	for (int i = 0; i <= 32 / index_len;i = i + 1) {
 		index = index ^ (pc & mask_pc);
 		pc = pc >> index_len;
 	}
 
-	val_temp = gh & mask_gh;
+	GlobalHistory temp = *gh ;
 
-	for (int i = 0; i <= 32 / index_len; i = i + 1) {
-		index = index ^ (val_temp & mask_pc);
-		val_temp = val_temp >> index_len;
+	for (int i = 0; i <= length / index_len; i = i + 1) {
+		if (length == 0) {
+			index = index ^ 0;
+		}
+		else {
+			uint32_t mask_his_len = (1<< (length%index_len)) -1 ;
+			if ((i + 1) > (length / index_len)) {
+				index = index ^ (temp.lsb & mask_his_len);
+			}
+			else {
+				index = index ^ (temp.lsb & mask_pc);
+			}
+
+		}
+		temp = *gh >> index_len;
 	}
 
 	return index;
@@ -367,7 +392,7 @@ void train_predictor(uint32_t pc, uint8_t outcome)
     case CUSTOM:
 		if(prediction != outcome || S < theta){
 			for(int i = 0; i < M; i++){
-				gIndex = index(pc, gHistoryArray[i],i);
+				gIndex = index(pc, lgGHistory,i);
 				if(outcome){
 					gehl[i][gIndex]->increment();
 				}
@@ -384,6 +409,7 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 
   // CUSTOM
   for(int i = 0 ; i< M ; i++){
-	  gHistoryArray[i] = ((gHistoryArray[i] << 1) | outcome) & gMaskArray[i];
+	  lgGHistory->update(outcome);
+	 // gHistoryArray[i] = ((gHistoryArray[i] << 1) | outcome) & gMaskArray[i];
   }
 }
