@@ -156,10 +156,11 @@ int prediction;
 
 int n = 0;
 int counterBits = 2;
-int counterBitsGehl = 2;
+int counterBitsGehl = 3;
 int theta = 0;
 //map<uint32_t, uint32_t> gehl_selector;
-SignedCounter* gehl_selector[M];
+SignedCounter* gehl_selector_0[M];
+SignedCounter* gehl_selector_1[M];
 void init_predictor()
 {
   //
@@ -187,14 +188,18 @@ void init_predictor()
   }
 
   for (int i = 0;i < M; i++) {
-	  gehl_selector[i] = new SignedCounter(3);  //Negative value, table used
+	  gehl_selector_0[i] = new SignedCounter(3);  //Negative value, table used
+  }
+  for (int i = 0;i < M; i++) {
+	  gehl_selector_1[i] = new SignedCounter(3);  //Negative value, table used
   }
 
-  //index_length[0] = 13;
-  //index_length[1] = 13;
-  //index_length[2] = 13;
-  //index_length[3] = 13;
-  //index_length[4] = 13;
+  index_length[0] = 11;
+  index_length[1] = 11;
+  index_length[2] = 11;
+  index_length[3] = 11;
+  index_length[4] = 11;
+  index_length[5] = 11;
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -310,14 +315,14 @@ uint8_t gehl_prediction(uint32_t pc){
 		gIndex = index(pc, lgGHistory,i);
 	//	printf("%u \n", gIndex);
 		if(gehl[i].find(gIndex) != gehl[i].end()){
-			if (gehl_selector[i]->value < 0) {
+			if (( (pc&1)&& (gehl_selector_1[i]->value < 0) ) || (!(pc & 1) && (gehl_selector_0[i]->value < 0))) {
 				S += gehl[i][gIndex]->value;
 				S += 0.5;
 			}
 		} 
 		else{
 			gehl[i].insert(make_pair(gIndex, new SignedCounter(counterBitsGehl)));
-			if (gehl_selector[i]->value < 0) {
+			if (((pc & 1) && (gehl_selector_1[i]->value < 0)) || (!(pc & 1) && (gehl_selector_0[i]->value < 0))) {
 				S += gehl[i][gIndex]->value;
 				S += 0.5;
 			}
@@ -329,7 +334,7 @@ uint8_t gehl_prediction(uint32_t pc){
 
 uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id) {
 
-	int index_len = 13;
+	int index_len = index_length[table_id];
 	int length = gMaskArray[table_id];
 	//if (((table_id == 2) ) && (alias->value > 0)) {
 	//	length = gMaskArray[table_id+4];
@@ -342,12 +347,26 @@ uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id) {
 	//	index = index ^ (pc & mask_pc);
 	//	pc = pc >> index_len;
 	//}
-	//pc = pc >> (2);
+	//pc = pc >> (1);
 	index = index ^ (pc & mask_pc);
 
 	//printf("in")
 	GlobalHistory temp = *gh ;
 
+	for (int i = 0;i <= table_id;i++) {
+		if (i == 0 or i == 1)
+			continue;
+		else if (i == 2 or i == 3)
+			temp = temp >> 2;
+		else
+			temp = temp >> 4;
+	}
+
+	if (table_id > 0) {
+		index = index ^ (temp.lsb & mask_pc);
+	}
+
+	/**
 	for (int i = 0; i <= length / index_len; i = i + 1) {
 		if (length == 0) {
 			index = index ^ 0;
@@ -363,7 +382,7 @@ uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id) {
 
 		}
 		temp = temp >> index_len;
-	}
+	} **/
 
 	return index;
 }
@@ -425,16 +444,23 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 		}
 		break;
     case CUSTOM:
-		/**
+		
 		for (int i = 0; i < M; i++) {
 			gIndex = index(pc, lgGHistory, i);
 			if (((gehl[i][gIndex]->value >= 0) && outcome) || ((gehl[i][gIndex]->value < 0) && !outcome)) {
-				gehl_selector[i]->decrement();
+				if ((pc & 1 ) == 1)
+					gehl_selector_1[i]->decrement();
+				else 
+					gehl_selector_0[i]->decrement();
 			}
 			else {
-				gehl_selector[i]->increment();
+				if ((pc & 1) == 1)
+					gehl_selector_1[i]->increment();
+				else
+					gehl_selector_0[i]->increment();
 			}
-		} **/
+		} 
+
 		//if(prediction != outcome){
 			for(int i = 0; i < M; i++){
 				gIndex = index(pc, lgGHistory,i);

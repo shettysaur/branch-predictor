@@ -24,7 +24,7 @@ extern const char *studentName;
 extern const char *studentID;
 extern const char *email;
 
-#define M 7
+#define M 5
 #define M_max 9
 #define N 8192
 //#define N_sel 4096
