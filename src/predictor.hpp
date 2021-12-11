@@ -24,9 +24,10 @@ extern const char *studentName;
 extern const char *studentID;
 extern const char *email;
 
-#define M 5
+#define M 7
 #define M_max 9
-#define N 2048
+#define N 8192
+//#define N_sel 4096
 //#define theta 7
 #define aliasBits 8
 #define thetacountBits 7

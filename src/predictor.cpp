@@ -144,9 +144,11 @@ uint8_t globalPrediction;
 
 //CUSTOM
 map<uint32_t, SignedCounter*> gehl[M];
-int S;
+float S;
 GlobalHistory* lgGHistory = new GlobalHistory();
 int gMaskArray[M_max];
+int index_length[M];
+
 SignedCounter* alias;
 SignedCounter* tc;
 uint8_t last_table_tag[N];
@@ -154,9 +156,10 @@ int prediction;
 
 int n = 0;
 int counterBits = 2;
-int counterBitsGehl = 3;
-int theta = 4;
-
+int counterBitsGehl = 2;
+int theta = 0;
+//map<uint32_t, uint32_t> gehl_selector;
+SignedCounter* gehl_selector[M];
 void init_predictor()
 {
   //
@@ -175,13 +178,23 @@ void init_predictor()
   float x = 3.0;
   for (int i = 1; i < M_max; i++) {
 	  gMaskArray[i] = int (x + 0.5);
-	  x *= 1.6;
+	  x *= 2.6;
   }
   alias =  new SignedCounter(aliasBits,-1);
   tc = new SignedCounter(thetacountBits, 0);
   for (int i = 0; i < N; i++) {
 	  last_table_tag[i] = 0;
   }
+
+  for (int i = 0;i < M; i++) {
+	  gehl_selector[i] = new SignedCounter(3);  //Negative value, table used
+  }
+
+  //index_length[0] = 13;
+  //index_length[1] = 13;
+  //index_length[2] = 13;
+  //index_length[3] = 13;
+  //index_length[4] = 13;
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -215,7 +228,8 @@ uint8_t make_prediction(uint32_t pc)
         return NOTTAKEN;
       }
     case GSHARE:
-		return gshare_prediction(pc);
+		//printf("%u  %u\n", gshare_prediction(pc),pc);
+		return gshare_prediction(pc); break;
 		
     case TOURNAMENT:
 		localPrediction = local_prediction(pc);
@@ -233,7 +247,8 @@ uint8_t make_prediction(uint32_t pc)
 			return localPrediction;
 		}
     case CUSTOM:
-		return gehl_prediction(pc);
+		//printf("%u  %u\n", gehl_prediction(pc),pc);
+		return gehl_prediction(pc); break;
     default:
       break;
   }
@@ -244,6 +259,7 @@ uint8_t make_prediction(uint32_t pc)
 
 uint8_t gshare_prediction(uint32_t pc){
 	gIndex = (gHistory ^ pc) & gMask;
+	//printf("%u %u\n", gIndex,pc);
 	if(gBht.find(gIndex) != gBht.end()){
 		// cout << "GIndex : " << gIndex << " predition : " << gBht[gIndex]->value << endl;
 		if(gBht[gIndex]->value >= 0)
@@ -289,15 +305,22 @@ uint8_t local_prediction(uint32_t pc){
 }
 
 uint8_t gehl_prediction(uint32_t pc){
-	S = M/2;
+	S = 0.0;
 	for(int i = 0; i < M; i++){
 		gIndex = index(pc, lgGHistory,i);
+	//	printf("%u \n", gIndex);
 		if(gehl[i].find(gIndex) != gehl[i].end()){
-			S += gehl[i][gIndex]->value;
+			if (gehl_selector[i]->value < 0) {
+				S += gehl[i][gIndex]->value;
+				S += 0.5;
+			}
 		} 
 		else{
 			gehl[i].insert(make_pair(gIndex, new SignedCounter(counterBitsGehl)));
-			S += gehl[i][gIndex]->value;
+			if (gehl_selector[i]->value < 0) {
+				S += gehl[i][gIndex]->value;
+				S += 0.5;
+			}
 		}
 	}
 	prediction = (S >= 0) ? TAKEN : NOTTAKEN;
@@ -306,20 +329,23 @@ uint8_t gehl_prediction(uint32_t pc){
 
 uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id) {
 
-	int index_len = 11;
+	int index_len = 13;
 	int length = gMaskArray[table_id];
-	if (((table_id == 2) ) && (alias->value > 0)) {
-		length = gMaskArray[table_id+4];
-	}
-	//printf("%d", length);
-	
-	uint32_t index = 0;
-	uint32_t mask_pc = (1 << index_len) - 1;
-	for (int i = 0; i <= 32 / index_len;i = i + 1) {
-		index = index ^ (pc & mask_pc);
-		pc = pc >> index_len;
-	}
+	//if (((table_id == 2) ) && (alias->value > 0)) {
+	//	length = gMaskArray[table_id+4];
+	//}
 
+	uint32_t index = 0;
+	uint32_t mask_pc = (1 << index_len) - 1 ;
+	
+	//for (int i = 0; i <= 32 / index_len;i = i + 1) {
+	//	index = index ^ (pc & mask_pc);
+	//	pc = pc >> index_len;
+	//}
+	//pc = pc >> (2);
+	index = index ^ (pc & mask_pc);
+
+	//printf("in")
 	GlobalHistory temp = *gh ;
 
 	for (int i = 0; i <= length / index_len; i = i + 1) {
@@ -336,7 +362,7 @@ uint32_t index(uint32_t pc, GlobalHistory* gh, int table_id) {
 			}
 
 		}
-		temp = *gh >> index_len;
+		temp = temp >> index_len;
 	}
 
 	return index;
@@ -399,16 +425,30 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 		}
 		break;
     case CUSTOM:
-		if(prediction != outcome || S < theta){
+		/**
+		for (int i = 0; i < M; i++) {
+			gIndex = index(pc, lgGHistory, i);
+			if (((gehl[i][gIndex]->value >= 0) && outcome) || ((gehl[i][gIndex]->value < 0) && !outcome)) {
+				gehl_selector[i]->decrement();
+			}
+			else {
+				gehl_selector[i]->increment();
+			}
+		} **/
+		//if(prediction != outcome){
 			for(int i = 0; i < M; i++){
 				gIndex = index(pc, lgGHistory,i);
+				
 				if(outcome){
-					gehl[i][gIndex]->increment();
+					
+						gehl[i][gIndex]->increment(); 
 				}
-				else{
-					gehl[i][gIndex]->decrement();
+				else {
+					
+						gehl[i][gIndex]->decrement(); 
 				}
 
+				/**
 				if (i == (M - 1)) {
 					if (last_table_tag[gIndex] == (pc & 7)) {
 						alias->increment();
@@ -417,11 +457,12 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 						alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();alias->decrement();
 					}
 					last_table_tag[gIndex] = (pc & 7);
-				}
+				} **/
 			}
 			//printf("%d", alias->value);
-		}
-		if (prediction != outcome) {
+		//}
+		
+	/**	if (prediction != outcome) {
 			tc->increment();
 			if (tc->value >= 50) {
 				tc->value = 0;
@@ -434,16 +475,14 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 				tc->value = 0;
 				//theta = theta - 1;
 			}
-		}
+		} **/
     default:
       break;
   }
   gHistory = ((gHistory << 1) | outcome) & gMask;
   lBht[pcIndex].second = ((lBht[pcIndex].second << 1) | outcome) & lMask;
-
+  
   // CUSTOM
-  for(int i = 0 ; i< M ; i++){
-	  lgGHistory->update(outcome);
-	 // gHistoryArray[i] = ((gHistoryArray[i] << 1) | outcome) & gMaskArray[i];
-  }
+  lgGHistory->update(outcome);
+  
 }
